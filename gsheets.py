@@ -23,62 +23,52 @@ COLUMNAS = [
 ]
 
 
-def _get_client(json_path: str):
-    creds = Credentials.from_service_account_file(json_path, scopes=SCOPES)
-    return gspread.authorize(creds)
-
-
-def _find_json(carpeta: str) -> str:
-    """Busca el archivo .json de credenciales en la carpeta del proyecto."""
-    for f in os.listdir(carpeta):
-        if f.endswith(".json") and f != "proveedores.json":
-            return os.path.join(carpeta, f)
-    raise FileNotFoundError("No se encontró el archivo JSON de credenciales en la carpeta.")
+def _get_client():
+    """
+    Intenta conectarse usando Streamlit Secrets (Streamlit Cloud).
+    Si no están disponibles, busca el archivo JSON local (Mac local).
+    """
+    try:
+        import streamlit as st
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        return gspread.authorize(creds)
+    except Exception:
+        # Fallback: archivo JSON local
+        carpeta = os.path.dirname(__file__)
+        for f in os.listdir(carpeta):
+            if f.endswith(".json") and f != "proveedores.json":
+                json_path = os.path.join(carpeta, f)
+                creds = Credentials.from_service_account_file(json_path, scopes=SCOPES)
+                return gspread.authorize(creds)
+        raise FileNotFoundError("No se encontraron credenciales de Google.")
 
 
 def sincronizar_fila(fila: dict):
-    """
-    Agrega una fila al Google Sheet.
-    Si la hoja no tiene encabezados todavía, los crea primero.
-    """
     try:
-        carpeta = os.path.dirname(__file__)
-        json_path = _find_json(carpeta)
-        client = _get_client(json_path)
+        client = _get_client()
         sheet = client.open_by_key(SHEET_ID).sheet1
-
-        # Crear encabezados si la hoja está vacía
         if sheet.row_count == 0 or sheet.cell(1, 1).value is None:
             sheet.append_row(COLUMNAS)
-
-        # Agregar fila con los datos
         nueva_fila = [str(fila.get(col, "")) for col in COLUMNAS]
         sheet.append_row(nueva_fila)
         return True, None
-
     except Exception as e:
         return False, str(e)
 
 
 def inicializar_hoja():
-    """
-    Verifica la conexión y crea los encabezados si la hoja está vacía.
-    Retorna (True, email_bot) si OK, (False, error) si falla.
-    """
     try:
-        carpeta = os.path.dirname(__file__)
-        json_path = _find_json(carpeta)
-        client = _get_client(json_path)
+        client = _get_client()
         sheet = client.open_by_key(SHEET_ID).sheet1
-
         if sheet.row_count == 0 or sheet.cell(1, 1).value is None:
             sheet.append_row(COLUMNAS)
-
-        # Leer email del bot desde el JSON
-        with open(json_path) as f:
-            email = json.load(f).get("client_email", "")
-
+        # Intentar obtener email
+        try:
+            import streamlit as st
+            email = st.secrets["gcp_service_account"].get("client_email", "")
+        except Exception:
+            email = "conciliaciones-bot@numeric-mile-498819-f7.iam.gserviceaccount.com"
         return True, email
-
     except Exception as e:
         return False, str(e)
