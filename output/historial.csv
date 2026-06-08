@@ -1,0 +1,2 @@
+fecha,hora,proveedor,registros_banco,registros_sf,diferencia_registros,monto_banco,monto_sf,diferencia_montos,conciliados,solo_banco,solo_sf,dif_monto,tolerancia,carpeta_detalle
+2026-06-01,17:12:47,Payvalida,8048,8043,5,980979674.0,980802306.77,177367.23,8043,5,0,0,1.0,Payvalida/2026-06-01
