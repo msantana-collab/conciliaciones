@@ -14,7 +14,7 @@ SCOPES = [
 ]
 
 COLUMNAS = [
-    "fecha", "hora", "proveedor",
+    "fecha", "hora", "origen", "proveedor",
     "registros_banco", "registros_sf", "diferencia_registros",
     "monto_banco", "monto_sf", "diferencia_montos",
     "conciliados", "solo_banco", "solo_sf", "dif_monto",

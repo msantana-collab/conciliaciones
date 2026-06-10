@@ -49,6 +49,7 @@ def guardar_conciliacion(resultado: dict, fecha_override: str = None):
     fila = {
         "fecha":                fecha_dia,
         "hora":                 hora_str,
+        "origen":               "Payin",
         "proveedor":            proveedor,
         "registros_banco":      metricas["total_registros_banco"],
         "registros_sf":         metricas["total_registros_sf"],

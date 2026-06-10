@@ -311,7 +311,9 @@ elif pagina == "📅 Historial":
             solo_s    = int(fila_sel["solo_sf"])
             conc      = int(fila_sel["conciliados"])
 
+            origen_sel = fila_sel.get("origen", "Payin") if "origen" in fila_sel.index else "Payin"
             st.markdown(f"### Conciliación {prv_sel} — {fecha_str}")
+            st.caption(f"🏷 Origen: **{origen_sel}**")
 
             # ── Bloque 1: Totales
             st.markdown("#### 📊 Totales del día")
@@ -442,7 +444,7 @@ elif pagina == "📅 Historial":
             st.markdown("---")
             # ── Exportar
             columnas_export = [
-                "fecha", "hora", "proveedor",
+                "fecha", "hora", "origen", "proveedor",
                 "registros_banco", "registros_sf", "diferencia_registros",
                 "monto_banco", "monto_sf", "diferencia_montos",
                 "conciliados", "solo_banco", "solo_sf", "dif_monto"
