@@ -6,7 +6,7 @@ from datetime import datetime
 from motor import cargar_banco, cargar_salesforce, conciliar, SALESFORCE_CONFIG
 from config_manager import cargar_proveedores, agregar_proveedor, eliminar_proveedor
 from historial import guardar_conciliacion, cargar_historial, cargar_detalle
-from gsheets import sincronizar_fila, inicializar_hoja
+from gsheets import sincronizar_fila, inicializar_hoja, actualizar_nota
 
 # ─────────────────────────────────────────────
 #  CONFIGURACIÓN DE PÁGINA
@@ -407,7 +407,17 @@ elif pagina == "📅 Historial":
                 os.makedirs(os.path.dirname(notas_path), exist_ok=True)
                 with open(notas_path, "w") as f:
                     json.dump(todas_notas, f, ensure_ascii=False, indent=2)
-                st.success("Resumen guardado.")
+                # Sincronizar nota al Google Sheet
+                ok, err = actualizar_nota(
+                    fila_sel["fecha"].strftime("%Y-%m-%d"),
+                    prv_sel,
+                    nueva_nota
+                )
+                if ok:
+                    st.success("✅ Resumen guardado y sincronizado con Google Sheets.")
+                else:
+                    st.success("✅ Resumen guardado localmente.")
+                    st.caption(f"No se pudo sincronizar con Sheets: {err}")
 
             st.markdown("---")
 
