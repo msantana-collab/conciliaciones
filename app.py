@@ -272,7 +272,7 @@ elif pagina == "📅 Historial":
         with col_f2:
             fecha_min = df_hist["fecha"].min().date()
             fecha_max = df_hist["fecha"].max().date()
-            filtro_desde = st.date_input("Desde", value=fecha_min, min_value=fecha_min, max_value=fecha_max)
+            filtro_desde = st.date_input("Desde", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
         with col_f3:
             filtro_hasta = st.date_input("Hasta", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
 
@@ -285,69 +285,164 @@ elif pagina == "📅 Historial":
             (df_filtrado["fecha"].dt.date <= filtro_hasta)
         ]
 
-        st.markdown(f"**{len(df_filtrado)} conciliaciones** encontradas")
-        st.markdown("---")
+        if df_filtrado.empty:
+            st.info("No hay conciliaciones para el período seleccionado.")
+        else:
+            # ── Selector de ejecución (mostrar la más reciente por defecto)
+            opciones = df_filtrado.apply(
+                lambda r: f"{r['fecha'].strftime('%d/%m/%Y')} — {r['proveedor']}",
+                axis=1
+            ).tolist()
+            seleccion_idx = st.selectbox("📋 Conciliación", range(len(opciones)), format_func=lambda i: opciones[i])
+            fila_sel = df_filtrado.iloc[seleccion_idx]
 
-        # ── Métricas resumen del período
-        if not df_filtrado.empty:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total ejecuciones",      len(df_filtrado))
-            c2.metric("Promedio conciliados",   f"{df_filtrado['conciliados'].mean():,.0f}")
-            c3.metric("Total solo en banco",    f"{df_filtrado['solo_banco'].sum():,}")
-            c4.metric("Total dif. de monto",    f"{df_filtrado['dif_monto'].sum():,}")
             st.markdown("---")
 
-        # ── Tabla de historial
-        columnas_mostrar = [
-            "fecha", "hora", "proveedor",
-            "registros_banco", "registros_sf", "diferencia_registros",
-            "monto_banco", "monto_sf", "diferencia_montos",
-            "conciliados", "solo_banco", "solo_sf", "dif_monto"
-        ]
-        df_vista = df_filtrado[columnas_mostrar].copy()
-        df_vista["fecha"]         = df_vista["fecha"].dt.strftime("%d/%m/%Y")
-        df_vista["monto_banco"]   = df_vista["monto_banco"].apply(fmt_monto)
-        df_vista["monto_sf"]      = df_vista["monto_sf"].apply(fmt_monto)
-        df_vista["diferencia_montos"] = df_vista["diferencia_montos"].apply(fmt_monto)
+            # ── Resumen ejecutivo
+            fecha_str = fila_sel["fecha"].strftime("%d/%m/%Y")
+            prv_sel   = fila_sel["proveedor"]
+            reg_banco = int(fila_sel["registros_banco"])
+            reg_sf    = int(fila_sel["registros_sf"])
+            dif_reg   = int(fila_sel["diferencia_registros"])
+            monto_b   = float(fila_sel["monto_banco"])
+            monto_s   = float(fila_sel["monto_sf"])
+            dif_m     = float(fila_sel["diferencia_montos"])
+            solo_b    = int(fila_sel["solo_banco"])
+            solo_s    = int(fila_sel["solo_sf"])
+            conc      = int(fila_sel["conciliados"])
 
-        st.dataframe(df_vista, use_container_width=True, hide_index=True)
+            st.markdown(f"### Conciliación {prv_sel} — {fecha_str}")
 
-        # ── Exportar historial filtrado
-        st.download_button(
-            label="⬇ Exportar historial (CSV)",
-            data=df_to_csv_bytes(df_filtrado[columnas_mostrar]),
-            file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
+            # ── Bloque 1: Totales
+            st.markdown("#### 📊 Totales del día")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Transacciones banco",  f"{reg_banco:,}")
+            c2.metric("Transacciones SF",     f"{reg_sf:,}")
+            c3.metric("Conciliadas",          f"{conc:,}",
+                      delta=f"{round(conc/max(reg_banco,1)*100,1)}% del total")
 
-        st.markdown("---")
+            st.markdown("")
+            c4, c5, c6 = st.columns(3)
+            c4.metric("Monto total banco",    fmt_monto(monto_b))
+            c5.metric("Monto total SF",       fmt_monto(monto_s))
+            c6.metric("Diferencia de montos", fmt_monto(dif_m),
+                      delta="✅ Sin diferencia" if dif_m == 0 else f"⚠ {fmt_monto(dif_m)}",
+                      delta_color="normal" if dif_m == 0 else "inverse")
 
-        # ── Ver detalle de una ejecución específica
-        st.markdown("### 🔍 Ver detalle de una ejecución")
-        opciones = df_filtrado.apply(
-            lambda r: f"{r['fecha'].strftime('%d/%m/%Y')} {r['hora']} — {r['proveedor']}",
-            axis=1
-        ).tolist()
+            st.markdown("---")
 
-        if opciones:
-            seleccion_idx = st.selectbox("Seleccioná una ejecución", range(len(opciones)), format_func=lambda i: opciones[i])
-            fila_sel = df_filtrado.iloc[seleccion_idx]
+            # ── Bloque 2: Estado de la diferencia
+            st.markdown("#### 🔍 Análisis de diferencias")
+
+            if dif_reg == 0 and dif_m == 0:
+                st.success("✅ Conciliación perfecta — sin diferencias de registros ni de montos.")
+            else:
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.markdown("**Órdenes de pago**")
+                    if solo_b > 0:
+                        st.error(f"🔴 {solo_b} orden{'es' if solo_b>1 else ''} presente{'s' if solo_b>1 else ''} en banco pero no en Salesforce")
+                    else:
+                        st.success("✅ Sin órdenes pendientes en banco")
+                    if solo_s > 0:
+                        st.warning(f"🟡 {solo_s} orden{'es' if solo_s>1 else ''} presente{'s' if solo_s>1 else ''} en Salesforce pero no en banco")
+                    else:
+                        st.success("✅ Sin órdenes pendientes en Salesforce")
+
+                with col_b:
+                    st.markdown("**Montos**")
+                    if dif_m > 0:
+                        carpeta_det = fila_sel["carpeta_detalle"]
+                        df_sb = cargar_detalle(carpeta_det, "solo_banco")
+                        monto_ordenes_faltantes = 0
+                        if not df_sb.empty:
+                            cfg = cargar_proveedores().get(prv_sel, {})
+                            col_m = cfg.get("col_monto", "").strip()
+                            if col_m in df_sb.columns:
+                                from motor import limpiar_monto
+                                monto_ordenes_faltantes = df_sb[col_m].apply(limpiar_monto).sum()
+
+                        dif_centavos = round(abs(dif_m - monto_ordenes_faltantes), 2)
+
+                        st.markdown(f"- Diferencia total identificada: **{fmt_monto(dif_m)}**")
+                        if monto_ordenes_faltantes > 0:
+                            st.markdown(f"- Monto de órdenes sin match: **{fmt_monto(monto_ordenes_faltantes)}**")
+                        if dif_centavos > 0:
+                            st.markdown(f"- Diferencia de centavos: **{fmt_monto(dif_centavos)}**")
+
+                        dif_pendiente = round(abs(dif_m - monto_ordenes_faltantes - dif_centavos), 2)
+                        if dif_pendiente == 0:
+                            st.success(f"✅ Diferencia pendiente: **{fmt_monto(0)}** — Saldo exacto")
+                        else:
+                            st.error(f"⚠ Diferencia pendiente: **{fmt_monto(dif_pendiente)}**")
+                    else:
+                        st.success("✅ Sin diferencias de monto")
+
+            st.markdown("---")
+
+            # ── Bloque 3: Comentario del día
+            st.markdown("#### 💬 Resumen del día")
+            notas_key = f"notas_{prv_sel}_{fila_sel['fecha'].strftime('%Y%m%d')}"
+
+            # Cargar nota guardada si existe
+            import json, os
+            notas_path = os.path.join(os.path.dirname(__file__) if '__file__' in dir() else ".", "output", "notas.json")
+            try:
+                with open(notas_path) as f:
+                    todas_notas = json.load(f)
+            except Exception:
+                todas_notas = {}
+
+            nota_actual = todas_notas.get(notas_key, "")
+            nueva_nota = st.text_area(
+                "Escribí un resumen de la conciliación del día (visible para todo el equipo)",
+                value=nota_actual,
+                height=100,
+                placeholder="Ej: Conciliación del día sin novedades. Los 5 registros solo en banco corresponden a pagos del día anterior que aún no impactaron en Salesforce.",
+                key=f"ta_{notas_key}"
+            )
+            if st.button("💾 Guardar resumen", key=f"btn_{notas_key}"):
+                todas_notas[notas_key] = nueva_nota
+                os.makedirs(os.path.dirname(notas_path), exist_ok=True)
+                with open(notas_path, "w") as f:
+                    json.dump(todas_notas, f, ensure_ascii=False, indent=2)
+                st.success("Resumen guardado.")
+
+            st.markdown("---")
+
+            # ── Bloque 4: Detalle de registros
+            st.markdown("#### 📂 Detalle de registros")
             carpeta_det = fila_sel["carpeta_detalle"]
-
             tab1, tab2, tab3, tab4 = st.tabs([
-                f"✅ Conciliados ({int(fila_sel['conciliados']):,})",
-                f"🔴 Solo banco ({int(fila_sel['solo_banco']):,})",
-                f"🟡 Solo SF ({int(fila_sel['solo_sf']):,})",
-                f"🟠 Dif. monto ({int(fila_sel['dif_monto']):,})",
+                f"✅ Conciliados ({conc:,})",
+                f"🔴 Solo en banco ({solo_b:,})",
+                f"🟡 Solo en SF ({solo_s:,})",
+                f"🟠 Dif. de monto ({int(fila_sel['dif_monto']):,})",
             ])
             with tab1:
-                mostrar_tabla(cargar_detalle(carpeta_det, "conciliados"),      f"hist_conc_{seleccion_idx}")
+                mostrar_tabla(cargar_detalle(carpeta_det, "conciliados"),       f"hist_conc_{seleccion_idx}")
             with tab2:
-                mostrar_tabla(cargar_detalle(carpeta_det, "solo_banco"),       f"hist_sb_{seleccion_idx}")
+                mostrar_tabla(cargar_detalle(carpeta_det, "solo_banco"),        f"hist_sb_{seleccion_idx}")
             with tab3:
-                mostrar_tabla(cargar_detalle(carpeta_det, "solo_sf"),          f"hist_ssf_{seleccion_idx}")
+                mostrar_tabla(cargar_detalle(carpeta_det, "solo_sf"),           f"hist_ssf_{seleccion_idx}")
             with tab4:
-                mostrar_tabla(cargar_detalle(carpeta_det, "diferencias_monto"),f"hist_dm_{seleccion_idx}")
+                mostrar_tabla(cargar_detalle(carpeta_det, "diferencias_monto"), f"hist_dm_{seleccion_idx}")
+
+            st.markdown("---")
+            # ── Exportar
+            columnas_export = [
+                "fecha", "hora", "proveedor",
+                "registros_banco", "registros_sf", "diferencia_registros",
+                "monto_banco", "monto_sf", "diferencia_montos",
+                "conciliados", "solo_banco", "solo_sf", "dif_monto"
+            ]
+            st.download_button(
+                label="⬇ Exportar historial filtrado (CSV)",
+                data=df_to_csv_bytes(df_filtrado[columnas_export]),
+                file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
 
 
 # ─────────────────────────────────────────────
