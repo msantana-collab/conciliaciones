@@ -524,3 +524,63 @@ elif pagina == "⚙ Proveedores":
             st.success(f"✅ Conexión exitosa. Bot: `{msg}`")
         else:
             st.error(f"❌ Error de conexión: {msg}")
+
+    st.markdown("---")
+    st.markdown("### 🗑 Administrar historial")
+    st.markdown("Eliminá registros de prueba o conciliaciones incorrectas.")
+
+    import os, shutil
+    from historial import cargar_historial, OUTPUT_DIR, HISTORIAL_PATH
+
+    df_admin = cargar_historial()
+
+    if df_admin.empty:
+        st.info("El historial está vacío.")
+    else:
+        opciones_admin = df_admin.apply(
+            lambda r: f"{r['fecha'].strftime('%d/%m/%Y')} — {r['proveedor']}",
+            axis=1
+        ).tolist()
+
+        sel_admin = st.selectbox(
+            "Seleccioná el registro a eliminar",
+            range(len(opciones_admin)),
+            format_func=lambda i: opciones_admin[i],
+            key="sel_admin"
+        )
+
+        fila_admin = df_admin.iloc[sel_admin]
+
+        col_btn, col_info = st.columns([1, 3])
+        with col_btn:
+            confirmar = st.checkbox("Confirmar eliminación", key="confirm_del")
+            if st.button("🗑 Eliminar registro", type="secondary", disabled=not confirmar):
+                # 1. Eliminar del historial.csv local
+                df_nuevo = df_admin.drop(df_admin.index[sel_admin]).reset_index(drop=True)
+                df_nuevo.to_csv(HISTORIAL_PATH, index=False)
+
+                # 2. Eliminar carpeta de detalle local
+                carpeta = os.path.join(OUTPUT_DIR, fila_admin["carpeta_detalle"])
+                if os.path.exists(carpeta):
+                    shutil.rmtree(carpeta)
+
+                # 3. Eliminar del Google Sheet
+                try:
+                    from gsheets import _get_client, SHEET_ID
+                    client = _get_client()
+                    sheet = client.open_by_key(SHEET_ID).sheet1
+                    registros = sheet.get_all_values()
+                    fecha_str = fila_admin["fecha"].strftime("%Y-%m-%d")
+                    for i, row in enumerate(registros[1:], start=2):
+                        if len(row) >= 3 and row[0] == fecha_str and row[2] == fila_admin["proveedor"]:
+                            sheet.delete_rows(i)
+                            break
+                    st.success("✅ Registro eliminado del historial local y de Google Sheets.")
+                except Exception as e:
+                    st.success("✅ Registro eliminado del historial local.")
+                    st.caption(f"No se pudo eliminar de Sheets: {e}")
+
+                st.rerun()
+
+        with col_info:
+            st.caption(f"Fecha: **{fila_admin['fecha'].strftime('%d/%m/%Y')}** | Proveedor: **{fila_admin['proveedor']}** | Conciliados: **{int(fila_admin['conciliados']):,}**")
