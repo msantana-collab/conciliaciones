@@ -272,9 +272,9 @@ elif pagina == "📅 Historial":
         with col_f2:
             fecha_min = df_hist["fecha"].min().date()
             fecha_max = df_hist["fecha"].max().date()
-            filtro_desde = st.date_input("Desde", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
+            filtro_desde = st.date_input("Desde", value=fecha_min, min_value=fecha_min)
         with col_f3:
-            filtro_hasta = st.date_input("Hasta", value=fecha_max, min_value=fecha_min, max_value=fecha_max)
+            filtro_hasta = st.date_input("Hasta", value=fecha_max, min_value=fecha_min)
 
         # Aplicar filtros
         df_filtrado = df_hist.copy()
@@ -311,7 +311,9 @@ elif pagina == "📅 Historial":
             solo_s    = int(fila_sel["solo_sf"])
             conc      = int(fila_sel["conciliados"])
 
-            origen_sel = fila_sel.get("origen", "Payin") if "origen" in fila_sel.index else "Payin"
+            origen_sel = str(fila_sel.get("origen", "Payin")) if "origen" in fila_sel.index else "Payin"
+            if origen_sel == "nan" or origen_sel == "":
+                origen_sel = "Payin"
             st.markdown(f"### Conciliación {prv_sel} — {fecha_str}")
             st.caption(f"🏷 Origen: **{origen_sel}**")
 
