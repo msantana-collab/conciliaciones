@@ -61,7 +61,6 @@ def guardar_conciliacion(resultado: dict, fecha_override: str = None):
         "solo_banco":           metricas["solo_banco"],
         "solo_sf":              metricas["solo_sf"],
         "dif_monto":            metricas["dif_monto"],
-        "tolerancia":           metricas["tolerancia_usada"],
         "carpeta_detalle":      os.path.join(proveedor, fecha_dia),
     }
 
